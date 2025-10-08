@@ -90,7 +90,7 @@ const initializeDatabase = async () => {
         
         // Sync database if DB_SYNC is true
         if (env.DATABASE.SYNC) {
-            await sequelize.sync({ alter: env.NODE_ENV === 'development' });
+            await sequelize.sync({ alter: env.DATABASE.SYNC === 'true' });
             console.log('✅ Database synchronized successfully.');
         }
         
