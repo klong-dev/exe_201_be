@@ -1,30 +1,62 @@
-// User model - chỉ chứa properties/schema definition
-class User {
-    constructor(userData = {}) {
-        this.id = userData.id || null;
-        this.username = userData.username || '';
-        this.email = userData.email || '';
-        this.password = userData.password || '';
-        this.role = userData.role || 'user';
-        this.created_at = userData.created_at || null;
-        this.updated_at = userData.updated_at || null;
-    }
+// Sequelize User Model Definition
+module.exports = (sequelize, DataTypes) => {
+    const User = sequelize.define('User', {
+        id: {
+            type: DataTypes.UUID,
+            defaultValue: DataTypes.UUIDV4,
+            primaryKey: true,
+            allowNull: false,
+        },
+        username: {
+            type: DataTypes.STRING,
+            allowNull: false,
+            unique: true,
+            validate: {
+                notEmpty: true,
+                len: [3, 50],
+            },
+        },
+        email: {
+            type: DataTypes.STRING,
+            allowNull: false,
+            unique: true,
+            validate: {
+                isEmail: true,
+                notEmpty: true,
+            },
+        },
+        password: {
+            type: DataTypes.STRING,
+            allowNull: false,
+            validate: {
+                notEmpty: true,
+                len: [6, 255],
+            },
+        },
+        role: {
+            type: DataTypes.ENUM('user', 'admin'),
+            allowNull: false,
+            defaultValue: 'user',
+        },
+    }, {
+        tableName: 'users',
+        timestamps: true,
+        paranoid: true,
+        defaultScope: {
+            attributes: { exclude: ['password'] },
+        },
+        scopes: {
+            withPassword: {
+                attributes: { include: ['password'] },
+            },
+        },
+    });
 
-    // Utility method to convert to plain object (remove sensitive data)
-    toJSON() {
-        const { password, ...userObject } = this;
-        return userObject;
-    }
+    // Class methods
+    User.associate = function(models) {
+        // Định nghĩa associates
+        // Example: User.hasMany(models.Post, { foreignKey: 'userId' });
+    };
 
-    // Utility method to check if user is admin
-    isAdmin() {
-        return this.role === 'admin';
-    }
-
-    // Utility method to check if user is regular user
-    isUser() {
-        return this.role === 'user';
-    }
-}
-
-module.exports = User;
+    return User;
+};

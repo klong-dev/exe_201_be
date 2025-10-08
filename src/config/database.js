@@ -1,61 +1,125 @@
-const { Pool } = require('pg');
+const { Sequelize, DataTypes } = require('sequelize');
 const { env } = require('./env');
+const path = require('path');
+const fs = require('fs');
 
-// Database configuration using environment config
-const dbConfig = {
-    connectionString: env.DATABASE.URL,
+// Create Sequelize instance with PostgreSQL configuration
+const sequelize = new Sequelize({
+    dialect: 'postgres',
     host: env.DATABASE.HOST,
     port: env.DATABASE.PORT,
     database: env.DATABASE.NAME,
-    user: env.DATABASE.USER,
+    username: env.DATABASE.USER,
     password: env.DATABASE.PASSWORD,
-    ssl: env.DATABASE.SSL,
-    max: env.DATABASE.POOL.MAX,
-    idleTimeoutMillis: env.DATABASE.POOL.IDLE_TIMEOUT,
-    connectionTimeoutMillis: env.DATABASE.POOL.CONNECTION_TIMEOUT,
+    logging: false, // Tắt hoàn toàn SQL logging
+    dialectOptions: {
+        ssl: env.DATABASE.SSL
+    },
+    pool: {
+        max: env.DATABASE.POOL.MAX,
+        min: 0,
+        acquire: env.DATABASE.POOL.CONNECTION_TIMEOUT,
+        idle: env.DATABASE.POOL.IDLE_TIMEOUT,
+    },
+    define: {
+        timestamps: true,
+        createdAt: 'created_at',
+        updatedAt: 'updated_at',
+        underscored: true,
+    },
+});
+
+// Object to store all models
+const db = {
+    sequelize,
+    Sequelize,
+    DataTypes,
 };
 
-// Create connection pool
-const pool = new Pool(dbConfig);
+// Function to auto-load models
+const loadModels = () => {
+    const modelsDir = path.join(__dirname, '../models');
+    
+    if (!fs.existsSync(modelsDir)) {
+        console.warn('Models directory not found:', modelsDir);
+        return;
+    }
 
-// Helper function to execute queries
-const query = async (text, params) => {
-    const start = Date.now();
+    const files = fs.readdirSync(modelsDir);
+    
+    files.forEach(file => {
+        // Load files that contain '.model' in their name and end with .js
+        if (file.includes('.model') && file.endsWith('.js')) {
+            const modelPath = path.join(modelsDir, file);
+            const model = require(modelPath);
+            
+            // Check if the model exports a function (Sequelize model definition)
+            if (typeof model === 'function') {
+                const modelInstance = model(sequelize, DataTypes);
+                if (modelInstance && modelInstance.name) {
+                    db[modelInstance.name] = modelInstance;
+                    console.log(`✅ Model loaded: ${modelInstance.name}`);
+                }
+            }
+        }
+    });
+};
+
+// Function to setup associations between models
+const setupAssociations = () => {
+    Object.keys(db).forEach(modelName => {
+        if (db[modelName].associate && typeof db[modelName].associate === 'function') {
+            db[modelName].associate(db);
+            console.log(`✅ Associations setup for: ${modelName}`);
+        }
+    });
+};
+
+// Function to initialize database
+const initializeDatabase = async () => {
     try {
-        const result = await pool.query(text, params);
-        const duration = Date.now() - start;
-        console.log(`Executed query: ${text.substring(0, 100)}... Duration: ${duration}ms`);
-        return result;
+        // Test database connection
+        await sequelize.authenticate();
+        console.log('✅ Database connection has been established successfully.');
+
+        // Load all models
+        loadModels();
+        
+        // Setup model associations
+        setupAssociations();
+        
+        // Sync database if DB_SYNC is true
+        if (env.DATABASE.SYNC) {
+            await sequelize.sync({ alter: env.NODE_ENV === 'development' });
+            console.log('✅ Database synchronized successfully.');
+        }
+        
+        return db;
     } catch (error) {
-        console.error('Database query error:', error);
+        console.error('❌ Unable to connect to the database:', error);
         throw error;
     }
-};
-
-// Helper function to get a client from pool
-const getClient = async () => {
-    return await pool.connect();
 };
 
 // Helper function for transactions
 const transaction = async (callback) => {
-    const client = await pool.connect();
+    const t = await sequelize.transaction();
     try {
-        await client.query('BEGIN');
-        const result = await callback(client);
-        await client.query('COMMIT');
+        const result = await callback(t);
+        await t.commit();
         return result;
     } catch (error) {
-        await client.query('ROLLBACK');
+        await t.rollback();
         throw error;
-    } finally {
-        client.release();
     }
 };
 
+// Export database instance and utilities
 module.exports = {
-    pool,
-    query,
-    getClient,
+    db,
+    sequelize,
+    Sequelize,
+    DataTypes,
     transaction,
+    initializeDatabase,
 };

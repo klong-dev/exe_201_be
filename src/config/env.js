@@ -17,6 +17,7 @@ const env = {
         USER: process.env.DB_USERNAME || 'db_user',
         PASSWORD: process.env.DB_PASSWORD || 'db_password',
         SSL: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+        SYNC: process.env.DB_SYNC === 'true',
         POOL: {
             MAX: parseInt(process.env.DB_POOL_MAX) || 20,
             IDLE_TIMEOUT: parseInt(process.env.DB_IDLE_TIMEOUT) || 30000,

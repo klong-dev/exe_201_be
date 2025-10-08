@@ -1,9 +1,9 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
-const { Pool } = require('pg');
 
 const { env, validateEnv } = require('./src/config/env');
+const { initializeDatabase } = require('./src/config/database');
 validateEnv();
 
 const app = express();
@@ -35,33 +35,25 @@ app.use((err, req, res, next) => {
     });
 });
 
-const pool = new Pool({
-    connectionString: env.DATABASE.URL,
-    host: env.DATABASE.HOST,
-    port: env.DATABASE.PORT,
-    database: env.DATABASE.NAME,
-    user: env.DATABASE.USER,
-    password: env.DATABASE.PASSWORD,
-    ssl: env.DATABASE.SSL,
-    max: env.DATABASE.POOL.MAX,
-    idleTimeoutMillis: env.DATABASE.POOL.IDLE_TIMEOUT,
-    connectionTimeoutMillis: env.DATABASE.POOL.CONNECTION_TIMEOUT,
-});
+// Initialize database and start server
+const startServer = async () => {
+    try {
+        // Initialize Sequelize database
+        await initializeDatabase();
+        console.log('❤️  Database initialized successfully');
 
-pool.connect()
-    .then(client => {
-        console.log('❤️  Connected to PostgreSQL successfully');
-        client.release();
-    })
-    .catch(err => {
-        console.error('❌ PostgreSQL connection error:', err);
+        // Start server
+        app.listen(env.PORT, () => {
+            console.log(`🚀 Server is running on port ${env.PORT}`);
+            console.log(`📍 Environment: ${env.NODE_ENV}`);
+            console.log(`💾 Database: ${env.DATABASE.HOST}:${env.DATABASE.PORT}/${env.DATABASE.NAME}`);
+            console.log(`🔄 Database Sync: ${env.DATABASE.SYNC ? 'Enabled' : 'Disabled'}`);
+        });
+    } catch (error) {
+        console.error('❌ Failed to start server:', error);
         process.exit(1);
-    });
+    }
+};
 
-global.db = pool;
-
-app.listen(env.PORT, () => {
-    console.log(`🚀 Server is running on port ${env.PORT}`);
-    console.log(`📍 Environment: ${env.NODE_ENV}`);
-    console.log(`💾 Database: ${env.DATABASE.HOST}:${env.DATABASE.PORT}/${env.DATABASE.NAME}`);
-});
+// Start the application
+startServer();
